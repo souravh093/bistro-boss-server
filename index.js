@@ -79,7 +79,26 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users", async (req, res) => {
+    /**
+     * 0. do not show secure links to those who should not see the links
+     * 1. use jwt token verifyJwt
+     * 2. use verifyAdmin middleware
+     */
+
+    // Warning: use verifyJWT before using verifyAdmin
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      if (user?.role !== "admin") {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden message" });
+      }
+      next();
+    };
+
+    app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     });
@@ -95,6 +114,22 @@ async function run() {
       };
 
       const result = await userCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
+    // security layer: verifyJWT
+    // email same
+    // check admin
+    app.get("/users/admin/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.decoded.email !== email) {
+        res.send({ admin: false });
+      }
+
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const result = { admin: user?.role === "admin" };
       res.send(result);
     });
 
@@ -131,8 +166,10 @@ async function run() {
       }
 
       const decodedEmail = req.decoded.email;
-      if(email !== decodedEmail) {
-        return res.status(401).send(({error: true, message: 'Forbidden access'}))
+      if (email !== decodedEmail) {
+        return res
+          .status(401)
+          .send({ error: true, message: "Forbidden access" });
       }
 
       const query = { email: email };
